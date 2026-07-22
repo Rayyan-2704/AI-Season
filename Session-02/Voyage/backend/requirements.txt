@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+sqlalchemy
+pydantic
+pydantic-settings
+python-dotenv
+passlib[bcrypt]
+pyjwt
+google-generativeai
+python-multipart
