@@ -10,10 +10,11 @@ Run your solution:  python tasks.py
 import os
 import sys
 from openai import OpenAI
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
+from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-load_dotenv(find_dotenv())
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
 client = OpenAI(
     api_key=os.getenv("DO_API_KEY"),
