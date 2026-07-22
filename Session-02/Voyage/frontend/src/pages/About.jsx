@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import PageLayout from "../components/layout/PageLayout";
 import Button from "../components/common/Button";
+import { useAuth } from "../context/AuthContext";
 
 import aboutImage from "../assets/images/about-philosophy.jpg";
 
@@ -24,6 +25,8 @@ const principles = [
 ];
 
 function About() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <PageLayout>
       {/* Intro */}
@@ -90,7 +93,7 @@ function About() {
             Tell us where you're going and how you like to travel — the
             rest is just narrative.
           </p>
-          <Link to="/register" className="inline-block mt-8">
+          <Link to={isAuthenticated ? "/planner" : "/register"} className="inline-block mt-8">
             <Button variant="primary">Start planning</Button>
           </Link>
         </div>

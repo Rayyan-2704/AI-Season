@@ -1,6 +1,7 @@
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Button from "../common/Button";
+import Logo from "../common/Logo";
 
 function Navbar() {
   const { isAuthenticated, logout } = useAuth();
@@ -13,8 +14,9 @@ function Navbar() {
   return (
     <header className="bg-sand backdrop-blur-md sticky top-0 z-40 shadow-sm">
       <nav className="mx-auto max-w-6xl px-12 py-5 flex items-center justify-between">
-        <Link to="/" className="font-serif text-2xl tracking-wide text-charcoal">
-          Voyage
+        <Link to="/" className="flex items-center gap-2 font-serif text-2xl tracking-wide text-charcoal">
+          <Logo className="w-10 h-10" />
+              Voyage
         </Link>
 
         <div className="hidden md:flex items-center gap-8">

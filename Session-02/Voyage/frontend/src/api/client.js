@@ -15,4 +15,27 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const isAuthEndpoint =
+      error.config?.url?.includes("/auth/login") ||
+      error.config?.url?.includes("/auth/register");
+
+    if (status === 401 && !isAuthEndpoint) {
+      localStorage.removeItem("voyage_token");
+
+      const currentPath = window.location.pathname + window.location.search;
+      const isAlreadyOnLogin = window.location.pathname === "/login";
+
+      if (!isAlreadyOnLogin) {
+        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default apiClient;

@@ -3,8 +3,39 @@ import apiClient from "../api/client";
 
 const AuthContext = createContext(null);
 
+function decodeTokenPayload(token) {
+  try {
+    const payloadBase64 = token.split(".")[1];
+    const decoded = atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function isTokenValid(token) {
+  if (!token) return false;
+
+  const payload = decodeTokenPayload(token);
+  if (!payload || !payload.exp) return false;
+
+  const nowInSeconds = Date.now() / 1000;
+  return payload.exp > nowInSeconds;
+}
+
+function getStoredToken() {
+  const token = localStorage.getItem("voyage_token");
+  if (token && isTokenValid(token)) {
+    return token;
+  }
+  if (token) {
+    localStorage.removeItem("voyage_token");
+  }
+  return null;
+}
+
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem("voyage_token"));
+  const [token, setToken] = useState(() => getStoredToken());
 
   const register = async ({ email, password, name }) => {
     const response = await apiClient.post("/auth/register", { email, password, name });

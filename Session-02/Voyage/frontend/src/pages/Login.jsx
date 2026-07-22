@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import PageLayout from "../components/layout/PageLayout";
 import Card from "../components/common/Card";
 import Button from "../components/common/Button";
@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext";
 function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -24,7 +25,8 @@ function Login() {
 
     try {
       await login(form);
-      navigate("/planner");
+      const redirectPath = searchParams.get("redirect");
+      navigate(redirectPath || "/planner");
     } catch (err) {
       const detail = err.response?.data?.message || "Invalid email or password.";
       setError(detail);
