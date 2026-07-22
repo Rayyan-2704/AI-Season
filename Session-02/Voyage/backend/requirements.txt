@@ -2,10 +2,11 @@ fastapi
 uvicorn[standard]
 sqlmodel
 sqlalchemy
-pydantic
+pydantic[email]
 pydantic-settings
 python-dotenv
 passlib[bcrypt]
+bcrypt==4.0.1
 pyjwt
-google-generativeai
+groq
 python-multipart
