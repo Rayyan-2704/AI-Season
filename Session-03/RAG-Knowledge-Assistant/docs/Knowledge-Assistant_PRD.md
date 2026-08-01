@@ -1,4 +1,4 @@
-# AI Season Knowledge Assistant — RAG Chunking & Retrieval Comparison Dashboard: Product Requirements Document (PRD)
+# PRD: AI Season Knowledge Assistant — RAG Chunking & Retrieval Comparison Dashboard
 
 ## 1. Overview
 
@@ -131,29 +131,46 @@ Out-of-scope handling: if retrieved chunks have very low similarity score (vecto
 
 ## 8. UI Design (Streamlit)
 
-**Layout:**
-- Page config: wide layout, custom page title "AI Season Knowledge Assistant".
-- Header: centered title + short subtitle.
-- Single centered text input + "Get Answers" button (use `st.form` so Enter submits too).
-- Below: two `st.container()` sections, one per retrieval method, each with a section header (e.g. "🔎 Vector Search (MMR)" / "🔤 BM25 Keyword Retrieval").
-- Inside each section: `st.columns(3)` — one column per chunking method.
-- Each column renders a "card":
-  - Small bold label: chunking method name (e.g. "Fixed-size Chunking")
-  - Answer text in a styled container (custom CSS: white bg, subtle border, light shadow, rounded corners)
-  - Pill-shaped badge: "🧮 342 tokens"
-  - `st.expander("Show retrieved chunks")` listing each chunk's text + similarity/BM25 score + source
+UI/UX pattern is based on a working reference implementation (provided separately) — a simple, sequential, native-Streamlit layout rather than a custom-CSS card grid. Structure:
 
-**Styling approach:** inject custom CSS via `st.markdown("<style>...</style>", unsafe_allow_html=True)` to achieve:
-- Off-white page background (`#FAFAFA` or similar)
-- Indigo/blue accent (`#4F46E5` or similar) for header, button, section labels
-- Inter font (`@import` from Google Fonts or system fallback)
-- 10–12px border-radius everywhere, subtle `box-shadow`, generous card padding (~16–20px)
+**Top of page:**
+- `st.set_page_config(page_title="AI Season RAG Assistant", layout="wide")`
+- `st.title("AI Season Knowledge Assistant")`
+- A single `st.text_input("Ask a question about AI Season")` — no separate submit button needed; the app reruns and shows results as soon as `question` is truthy (matches the reference's `if question:` pattern). A `st.form` + submit button is an acceptable alternative if you want to avoid a rerun on every keystroke, but is not required.
 
-**Loading state:** show `st.spinner` while all 6 pipelines run (can run sequentially or with `concurrent.futures.ThreadPoolExecutor` for speed — recommended given 6 LLM calls per query).
+**Results, once a question is entered — two top-level sections, one per retrieval method:**
 
-**Error handling in UI:** if Groq API key missing/invalid, show a clear `st.error` banner instead of silently falling back to mock mode (mock mode is fine for local dev, but the UI should make it visually obvious when running in mock mode, e.g. a small badge "⚠️ MOCK MODE").
+```
+st.divider()
+
+st.title("Vector Retrieval")
+for chunking_name, chunking_source in [("Fixed Chunking", ...), ("Recursive Chunking", ...), ("Paragraph Chunking", ...)]:
+    st.header(chunking_name)
+    answer, tokens = <run pipeline>
+    st.write(answer)
+    st.caption(f"Total tokens used: {tokens}")
+    with st.expander("Show retrieved chunks"):
+        for i, doc in enumerate(retrieved_docs):
+            st.write(f"Chunk {i+1}")
+            st.write(doc.page_content)
+    st.divider()
+
+st.title("BM25 Keyword Retrieval")
+# same loop, three chunking methods
+```
+
+So each of the 6 combinations is rendered as: **chunking-method header → answer text → token-count caption → collapsible retrieved-chunks expander → divider**, grouped under two big retrieval-method titles, top to bottom (Vector Retrieval block first, then BM25 block). This replaces the earlier 3-column card-grid concept — it's simpler to build, easier to scan top-to-bottom, and matches a layout that's already known to work well in Streamlit.
+
+**Light polish on top of the base pattern (optional, apply after the sequential layout works):**
+- A short subtitle/caption under the main title.
+- `st.spinner("Running all 6 pipelines...")` while `run_all_combinations()` executes.
+- Keep `st.caption` for the token count (renders as small muted text — close enough to a "pill" without needing custom CSS); a light `st.badge`-style emoji prefix like `"🧮 Total tokens used: 342"` is a nice touch if desired.
+- Minimal custom CSS is fine for small touches (e.g. accent color on `st.title`/`st.header` via `st.markdown("<style>...</style>")`) but is not required — prioritize matching the reference's plain, functional structure over heavy visual design.
+
+**Error handling in UI:** if `GROQ_API_KEY` is missing, `st.error(...)` + `st.stop()` immediately at startup (as in the reference) rather than silently falling back to mock mode. If a mock mode is still supported for local dev (per Section 12), flag it visibly, e.g. `st.caption("⚠️ Running in mock mode — no Groq API key detected")`.
 
 ---
+
 
 ## 9. Folder / File Structure
 
@@ -347,12 +364,13 @@ Each stage below is independently completable and testable before moving to the 
 - **Done when:** `python backend.py` alone (no Streamlit) prints all 6 answers, sources, and token counts for a test question. **At this point `backend.py` is a complete, standalone, submittable deliverable.**
 
 ### Stage 8 — Streamlit UI (`app.py`)
-- Build the static layout first with hardcoded dummy data (header, input, two retrieval-method sections, 3-column card grids) to nail the structure.
+- Build the static layout first with hardcoded dummy data (title, text input, "Vector Retrieval" section with 3 chunking-method headers, "BM25 Keyword Retrieval" section with the same 3) to nail the sequential structure from Section 8.
 - Swap dummy data for a real call to `backend.run_all_combinations(question)`.
-- Add `st.expander` for retrieved chunks, token pill badges, `st.spinner` while running.
-- Apply the custom CSS styling from Section 8 (off-white bg, indigo accent, Inter font, rounded corners, card shadows).
-- Add the mock-mode indicator badge if applicable.
-- **Done when:** `streamlit run app.py` produces the full comparison dashboard matching the UI brief, driven entirely by `backend.py`.
+- For each of the 6 combinations render, in order: `st.header(chunking_name)` → `st.write(answer)` → `st.caption(f"Total tokens used: {tokens}")` → `st.expander("Show retrieved chunks")` listing each chunk → `st.divider()`.
+- Add `st.spinner` while `run_all_combinations()` runs.
+- Add the mock-mode indicator (`st.caption("⚠️ ...")`) if applicable.
+- Apply only light optional polish last (accent color, subtitle) — the priority is matching the plain, working sequential structure, not heavy custom styling.
+- **Done when:** `streamlit run app.py` shows, top to bottom: input → Vector Retrieval (3 chunking blocks) → BM25 Keyword Retrieval (3 chunking blocks), driven entirely by `backend.py`.
 
 ### Stage 9 — Out-of-Scope & Edge Case Pass
 - Run several out-of-scope questions and confirm all 6 cards consistently show the refusal message.
@@ -373,7 +391,7 @@ Each stage below is independently completable and testable before moving to the 
 - [ ] Each card shows a token-usage badge and an expandable retrieved-chunks list with chunk text + score + source.
 - [ ] An out-of-scope query produces the designated "not enough information" response across all 6 combinations (not hallucinated content).
 - [ ] MMR is used for vector retrieval (not plain top-k similarity).
-- [ ] UI matches the styling brief: off-white background, indigo/blue accents, Inter font, rounded corners, card shadows, no harsh borders.
+- [ ] UI follows the sequential layout in Section 8: title → input → "Vector Retrieval" section (3 chunking headers, each with answer/token caption/chunks expander) → "BM25 Keyword Retrieval" section (same structure).
 - [ ] Mock mode works without a Groq key (for local dev/testing), and is visually flagged in the UI when active.
 
 ---
