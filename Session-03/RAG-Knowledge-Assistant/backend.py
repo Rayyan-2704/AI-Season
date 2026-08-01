@@ -42,6 +42,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter, CharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.retrievers import BM25Retriever
 
 load_dotenv()  # reads .env in the project root into os.environ
 
@@ -287,8 +288,40 @@ def build_all_vector_stores() -> dict[str, Chroma]:
 # =========================================================
 # 5. RETRIEVERS
 # =========================================================
-# (Stage 4/5) get_mmr_retriever(chunking_method) -> BaseRetriever
-#             get_bm25_retriever(chunking_method) -> BaseRetriever
+
+def get_mmr_retriever(
+    chunking_method: str,
+    k: int = TOP_K,
+    fetch_k: int = MMR_FETCH_K,
+    lambda_mult: float = MMR_LAMBDA,
+):
+    """
+    Dense vector retriever using Maximal Marginal Relevance (MMR) — balances
+    relevance to the query against diversity among the returned chunks, so
+    we don't get 3 near-duplicate chunks back for a single question.
+    """
+    vector_store = build_or_load_vector_store(chunking_method)
+    retriever = vector_store.as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": k, "fetch_k": fetch_k, "lambda_mult": lambda_mult},
+    )
+    return retriever
+
+
+# =========================================================
+# (Stage 5) get_bm25_retriever(chunking_method) -> BaseRetriever
+
+def get_bm25_retriever(chunking_method: str, k: int = TOP_K):
+    """
+    Sparse keyword/term-frequency retriever. Built in-memory directly from
+    the same chunk lists used for the vector store (via get_chunks()) —
+    NOT from Chroma — so it's a fair, apples-to-apples comparison against
+    the vector retriever for each chunking method.
+    """
+    chunks = get_chunks(chunking_method)
+    retriever = BM25Retriever.from_documents(chunks)
+    retriever.k = k
+    return retriever
 
 
 # =========================================================
@@ -339,5 +372,32 @@ if __name__ == "__main__":
         for method, store in stores.items():
             count = store._collection.count()
             print(f"[{method.upper():9s}] Chroma collection count: {count}")
+    except FileNotFoundError as e:
+        print(f"[SKIPPED] {e}")
+
+    print("\nTesting MMR vector retrievers with a sample question...\n")
+    SAMPLE_QUESTION = "What is the AI Season Bootcamp about?"
+    try:
+        for method in CHUNKING_METHODS:
+            print(f"--- {method.upper()} (MMR) ---")
+            retriever = get_mmr_retriever(method)
+            results = retriever.invoke(SAMPLE_QUESTION)
+            for i, doc in enumerate(results, 1):
+                preview = doc.page_content[:120].replace("\n", " ")
+                print(f"  [{i}] {preview}...")
+            print()
+    except FileNotFoundError as e:
+        print(f"[SKIPPED] {e}")
+
+    print("\nTesting BM25 retrievers with the same sample question...\n")
+    try:
+        for method in CHUNKING_METHODS:
+            print(f"--- {method.upper()} (BM25) ---")
+            retriever = get_bm25_retriever(method)
+            results = retriever.invoke(SAMPLE_QUESTION)
+            for i, doc in enumerate(results, 1):
+                preview = doc.page_content[:120].replace("\n", " ")
+                print(f"  [{i}] {preview}...")
+            print()
     except FileNotFoundError as e:
         print(f"[SKIPPED] {e}")
