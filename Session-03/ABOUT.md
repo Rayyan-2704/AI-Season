@@ -1,0 +1,3 @@
+# Retrieval Augmented Generation (RAG)
+
+A comprehensive session on Retrieval-Augmented Generation (RAG), covering the complete RAG architecture, including the Knowledge Base Construction and Retrieval pipelines. Topics included document ingestion and file conversion, document loading, chunking strategies, embeddings, vector databases, various chunking methods, and retrieval techniques for building accurate and context-aware AI applications.
