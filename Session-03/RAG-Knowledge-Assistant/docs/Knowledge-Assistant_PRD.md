@@ -1,4 +1,4 @@
-# PRD: AI Season Knowledge Assistant — RAG Chunking & Retrieval Comparison Dashboard
+# AI Season Knowledge Assistant — RAG Chunking & Retrieval Comparison Dashboard: Product Requirements Document (PRD)
 
 ## 1. Overview
 
