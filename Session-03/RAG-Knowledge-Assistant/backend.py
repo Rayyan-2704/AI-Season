@@ -6,7 +6,7 @@ Single-file backend for the RAG chunking & retrieval comparison dashboard.
 
 This file is the graded deliverable: it contains ALL pipeline logic
 (ingestion, chunking, retrieval, prompting, Groq calls, orchestration).
-`app.py` is a thin Streamlit UI layer that only imports `run_all_combinations()`
+'app.py' is a thin Streamlit UI layer that only imports 'run_all_combinations()'
 from here — it never reaches into internals directly.
 
 Runnable standalone:
@@ -23,7 +23,7 @@ MMR_FETCH_K = 10
 MMR_LAMBDA = 0.5
 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-GROQ_MODEL_DEFAULT = "llama-3.1-8b-instant"  # fallback if env var not set
+GROQ_MODEL_DEFAULT = "llama-3.1-8b-instant"
 
 DOCS_PATH = "docs/aiseason-document.txt"
 PERSIST_DIR = "db/chroma_db"
@@ -37,6 +37,7 @@ RETRIEVAL_METHODS = ["vector", "bm25"]
 # =========================================================
 import os
 import re
+import sys
 import concurrent.futures
 from dotenv import load_dotenv
 from langchain_core.documents import Document
@@ -47,14 +48,13 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
-load_dotenv()  # reads .env in the project root into os.environ
+load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock").strip().lower()
 GROQ_MODEL = os.getenv("GROQ_MODEL", GROQ_MODEL_DEFAULT).strip()
 
-# Mock mode is active if the user explicitly set LLM_PROVIDER=mock,
-# OR if they said "groq" but forgot to supply a real key.
+# Mock mode is active if the user explicitly set LLM_PROVIDER=mock or if it said "groq" but forgot to supply a real API key.
 IS_MOCK_MODE = (LLM_PROVIDER == "mock") or (LLM_PROVIDER == "groq" and not GROQ_API_KEY)
 
 if LLM_PROVIDER == "groq" and not GROQ_API_KEY:
@@ -138,8 +138,7 @@ def paragraph_chunk(text: str, max_size: int = CHUNK_SIZE) -> list[Document]:
     """
     raw_paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
 
-    # Merge tiny paragraphs forward into the next one
-    MIN_SIZE = max_size // 4  # paragraphs smaller than this get merged
+    MIN_SIZE = max_size // 4
     merged = []
     buffer = ""
     for para in raw_paragraphs:
@@ -151,13 +150,11 @@ def paragraph_chunk(text: str, max_size: int = CHUNK_SIZE) -> list[Document]:
             merged.append(buffer)
             buffer = ""
     if buffer:
-        # leftover small buffer — attach to last chunk if possible, else keep standalone
         if merged:
             merged[-1] = merged[-1] + "\n\n" + buffer
         else:
             merged.append(buffer)
 
-    # Hard-split any paragraph still over max_size
     final_texts = []
     for para in merged:
         if len(para) <= max_size:
@@ -292,12 +289,7 @@ def build_all_vector_stores() -> dict[str, Chroma]:
 # 5. RETRIEVERS
 # =========================================================
 
-def get_mmr_retriever(
-    chunking_method: str,
-    k: int = TOP_K,
-    fetch_k: int = MMR_FETCH_K,
-    lambda_mult: float = MMR_LAMBDA,
-):
+def get_mmr_retriever(chunking_method: str, k: int = TOP_K, fetch_k: int = MMR_FETCH_K, lambda_mult: float = MMR_LAMBDA):
     """
     Dense vector retriever using Maximal Marginal Relevance (MMR) — balances
     relevance to the query against diversity among the returned chunks, so
@@ -310,9 +302,6 @@ def get_mmr_retriever(
     )
     return retriever
 
-
-# =========================================================
-# (Stage 5) get_bm25_retriever(chunking_method) -> BaseRetriever
 
 def get_bm25_retriever(chunking_method: str, k: int = TOP_K):
     """
@@ -523,64 +512,70 @@ def run_all_combinations(question: str) -> dict:
 # =========================================================
 # 9. CLI TEST BLOCK
 # =========================================================
+
 if __name__ == "__main__":
+    # Run 'python backend.py --verbose' to see the granular per-stage diagnostics
+    # (chunking stats, per-collection counts, individual MMR/BM25 previews) used while building this project stage by stage.
+    # Default run just proves the core deliverable: building/loading all 3 Chroma collections and printing all 6 answers for a sample question.
+
+    VERBOSE = "--verbose" in sys.argv
+
     print_config_summary()
 
-    print("\nLoading document and testing chunking methods...\n")
-    try:
-        raw_text = load_document()
-        print(f"Loaded '{DOCS_PATH}' — {len(raw_text)} characters total.\n")
+    if VERBOSE:
+        print("\nLoading document and testing chunking methods...\n")
+        try:
+            raw_text = load_document()
+            print(f"Loaded '{DOCS_PATH}' — {len(raw_text)} characters total.\n")
+            for method_name, chunk_fn in [
+                ("fixed", fixed_chunk),
+                ("paragraph", paragraph_chunk),
+                ("recursive", recursive_chunk),
+            ]:
+                docs = chunk_fn(raw_text)
+                count = len(docs)
+                avg_size = sum(len(d.page_content) for d in docs) / count if count else 0
+                print(f"[{method_name.upper():9s}] chunks: {count:4d}   avg size: {avg_size:6.1f} chars")
+        except FileNotFoundError as e:
+            print(f"[SKIPPED] {e}")
 
-        for method_name, chunk_fn in [
-            ("fixed", fixed_chunk),
-            ("paragraph", paragraph_chunk),
-            ("recursive", recursive_chunk),
-        ]:
-            docs = chunk_fn(raw_text)
-            count = len(docs)
-            avg_size = sum(len(d.page_content) for d in docs) / count if count else 0
-            print(f"[{method_name.upper():9s}] chunks: {count:4d}   avg size: {avg_size:6.1f} chars")
+        print("\nBuilding/loading vector stores for all chunking methods...\n")
+        try:
+            stores = build_all_vector_stores()
+            for method, store in stores.items():
+                count = store._collection.count()
+                print(f"[{method.upper():9s}] Chroma collection count: {count}")
+        except FileNotFoundError as e:
+            print(f"[SKIPPED] {e}")
 
-    except FileNotFoundError as e:
-        print(f"[SKIPPED] {e}")
+        print("\nTesting MMR vector retrievers with a sample question...\n")
+        SAMPLE_QUESTION = "What is the AI Season Bootcamp about?"
+        try:
+            for method in CHUNKING_METHODS:
+                print(f"--- {method.upper()} (MMR) ---")
+                retriever = get_mmr_retriever(method)
+                sample_results = retriever.invoke(SAMPLE_QUESTION)
+                for i, doc in enumerate(sample_results, 1):
+                    preview = doc.page_content[:120].replace("\n", " ")
+                    print(f"  [{i}] {preview}...")
+                print()
+        except FileNotFoundError as e:
+            print(f"[SKIPPED] {e}")
 
-    print("\nBuilding/loading vector stores for all chunking methods...\n")
-    try:
-        stores = build_all_vector_stores()
-        for method, store in stores.items():
-            count = store._collection.count()
-            print(f"[{method.upper():9s}] Chroma collection count: {count}")
-    except FileNotFoundError as e:
-        print(f"[SKIPPED] {e}")
+        print("\nTesting BM25 retrievers with the same sample question...\n")
+        try:
+            for method in CHUNKING_METHODS:
+                print(f"--- {method.upper()} (BM25) ---")
+                retriever = get_bm25_retriever(method)
+                sample_results = retriever.invoke(SAMPLE_QUESTION)
+                for i, doc in enumerate(sample_results, 1):
+                    preview = doc.page_content[:120].replace("\n", " ")
+                    print(f"  [{i}] {preview}...")
+                print()
+        except FileNotFoundError as e:
+            print(f"[SKIPPED] {e}")
 
-    print("\nTesting MMR vector retrievers with a sample question...\n")
-    SAMPLE_QUESTION = "What is the AI Season Bootcamp about?"
-    try:
-        for method in CHUNKING_METHODS:
-            print(f"--- {method.upper()} (MMR) ---")
-            retriever = get_mmr_retriever(method)
-            results = retriever.invoke(SAMPLE_QUESTION)
-            for i, doc in enumerate(results, 1):
-                preview = doc.page_content[:120].replace("\n", " ")
-                print(f"  [{i}] {preview}...")
-            print()
-    except FileNotFoundError as e:
-        print(f"[SKIPPED] {e}")
-
-    print("\nTesting BM25 retrievers with the same sample question...\n")
-    try:
-        for method in CHUNKING_METHODS:
-            print(f"--- {method.upper()} (BM25) ---")
-            retriever = get_bm25_retriever(method)
-            results = retriever.invoke(SAMPLE_QUESTION)
-            for i, doc in enumerate(results, 1):
-                preview = doc.page_content[:120].replace("\n", " ")
-                print(f"  [{i}] {preview}...")
-            print()
-    except FileNotFoundError as e:
-        print(f"[SKIPPED] {e}")
-
-    print("\nTesting run_all_combinations() — full 6-pipeline orchestration...\n")
+    print("\nRunning run_all_combinations() — full 6-pipeline test...\n")
     print(f"[MODE: {'MOCK' if IS_MOCK_MODE else 'LIVE (Groq)'}]\n")
     try:
         TEST_QUESTION = "What is AI Season and who is it for?"
